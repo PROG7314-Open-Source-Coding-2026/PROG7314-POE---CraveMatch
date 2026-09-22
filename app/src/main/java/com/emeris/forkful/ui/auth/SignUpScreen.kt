@@ -1,11 +1,10 @@
 package com.emeris.forkful.ui.auth
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,13 +20,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -41,13 +43,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -74,40 +72,9 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
 @Composable
-fun ForkfulLogoBadge(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(80.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(ForestGreen),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.size(38.dp)) {
-            val strokeW = 3.5f
-            val forkX = size.width * 0.35f
-            val knifeX = size.width * 0.65f
-
-            drawLine(Color.White, Offset(forkX - 7f, 8f), Offset(forkX - 7f, 26f), strokeW)
-            drawLine(Color.White, Offset(forkX, 8f), Offset(forkX, 26f), strokeW)
-            drawLine(Color.White, Offset(forkX + 7f, 8f), Offset(forkX + 7f, 26f), strokeW)
-            drawLine(Color.White, Offset(forkX - 7f, 26f), Offset(forkX + 7f, 26f), strokeW)
-            drawLine(Color.White, Offset(forkX, 26f), Offset(forkX, size.height - 8f), strokeW + 2f)
-
-            val knifePath = Path().apply {
-                moveTo(knifeX, 8f)
-                cubicTo(knifeX + 14f, 10f, knifeX + 14f, 28f, knifeX, 34f)
-                close()
-            }
-            drawPath(knifePath, Color.White)
-            drawLine(Color.White, Offset(knifeX, 32f), Offset(knifeX, size.height - 8f), strokeW + 2f)
-        }
-    }
-}
-
-@Composable
-fun LoginScreen(
+fun SignUpScreen(
     onAuthenticated: (isNewUser: Boolean) -> Unit,
-    onNavigateToSignUp: () -> Unit
+    onNavigateToLogin: () -> Unit
 ) {
     val viewModel = containerViewModel { LoginViewModel(it.authRepository) }
     val uiState by viewModel.state.collectAsState()
@@ -116,13 +83,14 @@ fun LoginScreen(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
+    var displayName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        ForkfulLogger.logLifecycle("LoginScreen", "ON_CREATE")
+        ForkfulLogger.logLifecycle("SignUpScreen", "ON_CREATE")
     }
 
     LaunchedEffect(uiState) {
@@ -133,22 +101,23 @@ fun LoginScreen(
         }
     }
 
-    fun submitEmailLogin() {
+    fun submitRegistration() {
         validationError = when {
+            displayName.isBlank() -> "Please enter your name."
             !Validators.isValidEmail(email) -> "Please enter a valid email address."
             !Validators.isValidPassword(password) -> "Password must be at least 6 characters."
             else -> null
         }
         if (validationError == null) {
             focusManager.clearFocus()
-            viewModel.signInWithEmail(email.trim(), password)
+            viewModel.signUpWithEmail(email.trim(), password, displayName.trim())
         }
     }
 
     val launchGoogleSignIn: () -> Unit = {
         val act = activity
         if (act == null) {
-            ForkfulLogger.logAction("LOGIN", "Credential Manager needs an Activity context")
+            ForkfulLogger.logAction("SIGN_UP", "Credential Manager needs an Activity context")
         } else {
             coroutineScope.launch {
                 try {
@@ -173,9 +142,9 @@ fun LoginScreen(
                         )
                     }
                 } catch (_: GetCredentialCancellationException) {
-                    ForkfulLogger.logAction("LOGIN", "Google sign-in cancelled by user")
+                    ForkfulLogger.logAction("SIGN_UP", "Google sign-in cancelled by user")
                 } catch (e: Exception) {
-                    ForkfulLogger.logAction("LOGIN", "Credential Manager error: ${e.message}")
+                    ForkfulLogger.logAction("SIGN_UP", "Credential Manager error: ${e.message}")
                 }
             }
         }
@@ -186,28 +155,75 @@ fun LoginScreen(
             .fillMaxSize()
             .background(DarkAuthBackground)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 36.dp),
+            .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
-        ForkfulLogoBadge()
-        Spacer(modifier = Modifier.height(20.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            IconButton(onClick = onNavigateToLogin) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = PureWhite
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Welcome back",
+            text = "Create an account",
             fontFamily = FontFamily.Serif,
             fontSize = 32.sp,
             color = PureWhite
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Sign in to access your fridge and recipe decks",
+            text = "Start tracking ingredients and discovering custom recipes",
             fontSize = 14.sp,
             color = Color(0xFFB5BEB7),
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(28.dp))
+
+        OutlinedTextField(
+            value = displayName,
+            onValueChange = {
+                displayName = it
+                validationError = null
+            },
+            label = { Text("Your name") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color(0xFF8B948E)
+                )
+            },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = PureWhite,
+                unfocusedTextColor = PureWhite,
+                focusedBorderColor = ForestGreen,
+                unfocusedBorderColor = DarkAuthBorder,
+                focusedLabelColor = ForestGreen,
+                unfocusedLabelColor = Color(0xFF8B948E),
+                cursorColor = ForestGreen
+            ),
+            shape = RoundedCornerShape(16.dp),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = email,
@@ -252,7 +268,7 @@ fun LoginScreen(
                 password = it
                 validationError = null
             },
-            label = { Text("Password") },
+            label = { Text("Password (min 6 characters)") },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Lock,
@@ -288,7 +304,7 @@ fun LoginScreen(
                 imeAction = ImeAction.Done
             ),
             keyboardActions = KeyboardActions(
-                onDone = { submitEmailLogin() }
+                onDone = { submitRegistration() }
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -307,7 +323,7 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = { submitEmailLogin() },
+            onClick = { submitRegistration() },
             enabled = uiState !is LoginUiState.Loading,
             modifier = Modifier
                 .fillMaxWidth()
@@ -326,7 +342,7 @@ fun LoginScreen(
                 )
             } else {
                 Text(
-                    text = "Sign in",
+                    text = "Create account",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -353,7 +369,7 @@ fun LoginScreen(
 
         Button(
             onClick = {
-                ForkfulLogger.logAction("LOGIN", "Continue with Google tapped")
+                ForkfulLogger.logAction("SIGN_UP", "Continue with Google tapped")
                 launchGoogleSignIn()
             },
             enabled = uiState !is LoginUiState.Loading,
@@ -378,7 +394,7 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Continue with Google",
+                    text = "Sign up with Google",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -393,17 +409,17 @@ fun LoginScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Don't have an account?",
+                text = "Already have an account?",
                 color = Color(0xFF8B948E),
                 fontSize = 14.sp
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Sign up",
+                text = "Sign in",
                 color = Color(0xFFC7EED8),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onNavigateToSignUp() }
+                modifier = Modifier.clickable { onNavigateToLogin() }
             )
         }
     }
